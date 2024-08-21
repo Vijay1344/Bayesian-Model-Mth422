@@ -1,0 +1,150 @@
+library(MASS)
+library(rjags)
+data("Boston")
+Y <- Boston$medv
+X <- Boston[,1:13]
+X <- as.matrix(X)
+X <- scale(X)
+Intercept <- rep(1,length(Y))
+X <- cbind(Intercept,X)
+
+data <- list(Y = Y, X = X, n = length(Y), p = dim(X)[2])
+model_string <- textConnection("model{
+    # liklihood
+    for(i in 1:n){
+    Y[i] ~ dnorm(inprod(X[i,],beta[]), tau)
+    }
+    
+    #priors
+    for(j in 1:p){
+    beta[j] ~ dnorm(0,0.0001)
+    }
+    tau ~ dgamma(0.01,0.01)
+}")
+
+
+model <- jags.model(model_string,data = data, n.chains=2,quiet=TRUE)
+update(model, 10000, progress.bar="none")
+params  <- c("beta")
+samples <- coda.samples(model, 
+                        variable.names=params, 
+                        n.iter=20000, progress.bar="none")
+
+Beyasian_betas <- summary(samples)$statistics
+Beyasian_betas <- Beyasian_betas[,1]
+Beyasian_betas <- as.numeric(Beyasian_betas)
+Beyasian_betas
+
+
+
+## part (b)
+
+model1 <- lm(Y ~ X)
+summary(model1)
+classic_betas <- model1$coefficients
+classic_betas <- classic_betas[-2]
+classic_betas <- as.numeric(classic_betas)
+### comapre results
+coff <- cbind(Beyasian_betas,classic_betas)
+print(coff)
+
+
+
+## part (c)
+
+Y <- Boston$medv
+X <- Boston[,1:13]
+X <- as.matrix(X)
+X <- scale(X)
+Intercept <- rep(1,length(Y))
+X <- cbind(Intercept,X)
+
+data <- list(Y = Y, X = X, n = length(Y), p = dim(X)[2])
+model_string <- textConnection("model{
+    # liklihood
+    for(i in 1:n){
+    Y[i] ~ dnorm(inprod(X[i,],beta[]), tau)
+    }
+    
+    #priors
+    for(j in 1:p){
+    beta[j] ~ ddexp(0,0.0001)
+    }
+    tau ~ dgamma(0.01,0.01)
+}")
+
+
+model <- jags.model(model_string,data = data, n.chains=1,quiet=TRUE)
+update(model, 10000, progress.bar="none")
+params  <- c("beta")
+samples <- coda.samples(model, 
+                        variable.names=params, 
+                        n.iter=20000, progress.bar="none")
+B_betas_with_ddexp <- summary(samples)$statistics
+B_betas_eith_ddexp <- B_betas_with_ddexp[,1]
+B_betas_with_ddexp <- as.numeric(B_betas_with_ddexp)
+B_betas_with_ddexp <- B_betas_with_ddexp[1:14]
+coff1 <- cbind(Beyasian_betas,B_betas_with_ddexp)
+print(coff1)
+
+
+
+
+## part (d)
+
+#### part d
+library(MASS)
+library(rjags)
+data("Boston")
+
+Y <- Boston$medv
+Y <- Y[1:500]
+X <- Boston[1:500,1:13]
+X <- as.matrix(X)
+X <- scale(X)
+X_pred <- Boston[501:506,1:13]
+X_pred <- as.matrix(X_pred)
+X_pred <- scale(X_pred)
+### nan
+X_pred[,2] <- 0
+X_pred[,4] <- 0
+n_pred <- 6
+Intercept <- rep(1,length(Y))
+X <- cbind(Intercept,X)
+X_pred <- cbind(Intercept,X_pred)
+
+data <- list(Y = Y, X = X, n = length(Y), p = dim(X)[2], X_pred = X_pred, n_pred = n_pred)
+model_string <- textConnection("model{
+    # liklihood
+    for(i in 1:n){
+    Y[i] ~ dnorm(inprod(X[i,],beta[]), tau)
+    }
+    
+    #priors
+    beta[1]~dnorm(0,0.0001)
+    for(j in 2:p){
+    beta[j] ~ dnorm(0,0.0001)
+    }
+    tau ~ dgamma(0.01,0.01)
+    
+    #predictions
+    for(i in 1:n_pred){
+    Y_pred[i] ~ dnorm(inprod(X_pred[i,],beta[]), tau)
+    }
+}")
+
+
+model <- jags.model(model_string,data = data, n.chains=2,quiet=TRUE)
+update(model, 10000, progress.bar="none")
+params  <- c("Y_pred")
+samples <- coda.samples(model, 
+                        variable.names=params, 
+                        n.iter=20000, progress.bar="none")
+summary(samples)
+plot(samples)
+### we get Y_pred values from above model
+y_pred <- c(9.798,19.324,23.708,36.195,26.768,19.578)
+y_pred
+Y_ori <- Boston[501:506,14]
+Y_ori
+plot(Y_ori,y_pred)

@@ -1,0 +1,665 @@
+---
+title: "MTH422A_assigment_3_Solution"
+author: "Vijay Soren (211163)"
+date: "2024-03-11"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1
+### (a)
+```{r}
+County <- 1:10
+Approve <- c(12,90,80,5,63,15,67,22,56,33)
+Disapprove <- c(50,150,63,10,63,8,56,19,63,19)
+data <- data.frame(County, Approve,Disapprove)
+samples_pro <- data$Approve/(data$Approve + data$Disapprove)
+mean_samples_pro <- mean(samples_pro)
+var_samples_pro <- var(samples_pro)
+
+###a
+Y <- data$Approve
+n_is <- data$Approve + data$Disapprove
+L <- qbeta(c(0.025),shape1 = Y + 0.5, shape2 = n_is - Y + 0.5)
+U <- qbeta(c(0.975),shape1 = Y + 0.5, shape2 = n_is - Y + 0.5)
+CI95 <- cbind(L,U)
+CI95_data <- data.frame(data$County,CI95)
+print("95% credibles interval")
+print(CI95_data)
+
+```
+
+
+### (b)
+I have found $a = 5.5104$ and $b = 5.9696$
+
+
+### (c)
+```{r}
+c <- 0.480
+c_star <- c/(1-c)
+
+d <- (c_star + 1)^2
+e <- 0.02/c_star
+f <- 1/(e*d) - 1
+b <- f/(c_star + 1)
+a <- c_star*b
+
+
+
+###part c
+Y <- data$Approve
+n_is <- data$Approve + data$Disapprove
+L <- qbeta(c(0.025),shape1 = Y + a, shape2 = n_is - Y + b)
+U <- qbeta(c(0.975),shape1 = Y + a, shape2 = n_is - Y + b)
+CI95_EB <- cbind(L,U)
+CI95_data_EB <- data.frame(data$County,CI95_EB)
+print("95% credibles interval when beta prior")
+print(CI95_data_EB)
+
+```
+
+
+### (d)
+both part results from (a) and (d)  quite similar and all samples proportion's lies within their  95% credibles interval
+
+
+# 2
+
+
+### (a)
+$\mu_{map}$ = $\sum_{i=1}^{n}\frac{Y_i}{\sigma_i^2}/\sum_{i=1}^{n}\frac{1}{\sigma_i^2}$
+
+
+### (b)
+```{r }
+n <- 3
+
+Map_est <- function(Y,sigma_s)
+{
+  upper <- sum(Y/sigma_s^2)
+  lower <- sum(1/sigma_s^2)
+  mu_hat <- upper/lower
+  return(mu_hat)
+  
+}
+
+
+###part b
+n = 3
+Y <- c(12,10,22)   # y1 = 12, y2 = 10, y3 = 22
+
+sigma_s <- c(3,3,10) 
+mu_hat_map <- Map_est(Y = Y, sigma_s = sigma_s)
+print((mu_hat_map))
+```
+
+
+
+### (c)
+```{r}
+set.seed(2)
+n <- 1000
+mu <- 5
+sigma.s <- sample(1:40,n, replace = TRUE) ## random genration of sigma_s bw 1 :40 of length n
+Y <- rnorm(n, mean = mu, sd = sigma.s)
+mu_samples_pos <- rnorm(n, mean =  sum(Y/sigma.s^2)/(sum(1/sigma.s^2)), sd = sqrt(1/sum(1/sigma.s^2)))
+ ## posterior mean
+mean(mu_samples_pos)
+print("mean of posterior")
+print(mean(mu_samples_pos))
+
+```
+
+
+
+
+### (d)
+```{r}
+set.seed(2)
+n <- 1000
+mu <- 5
+sigma.s <- sample(1:40,n, replace = TRUE) ## random genration of sigma_s bw 1 :40 of length n
+Y <- rnorm(n, mean = mu, sd = sigma.s)
+
+## posterior distribution
+mu.pos.var <- 1/(sum(1/sigma.s^2))
+mu.pos.mean <- sum(Y/sigma.s^2)/sum(1/sigma.s^2)
+
+MAP_mu <- sum(Y/sigma.s^2)/sum(1/sigma.s^2)
+
+mu.pos.samples <- rnorm(1e4, mean = mu.pos.mean, sd = sqrt(mu.pos.var))
+mu.pos <- sort(mu.pos.samples)
+density <- dnorm(mu.pos, mean = mu.pos.mean, sd = sqrt(mu.pos.var))
+plot(mu.pos, density, type = "l")
+abline(v = MAP_mu , col = "red", lty = 2)
+abline(v = mu.pos.mean , col = "green", lty = 6)
+legend("topright", c("MAP_est","posterior mean"), fill = c("red","green"), lty = 2)
+```
+
+
+
+# 3
+
+
+### (a)
+The full conditional posterior distributions for $\sigma_1^2$ is $Inverse-Gamma(a + 0.5,Y_1^2/2 +b)$
+
+
+The full conditional posterior distributions for $b$ is $Gamma(1,1+\sum_{i=1}^{n}\frac{1}{\sigma_i^2})$
+
+
+### (b) psudocode
+
+```{r, echo=T}
+set.seed(1)
+library(invgamma)
+n <- 10
+a <- 10
+b <- rgamma(1,shape = 1,rate = 1)
+sigmaSq <- rinvgamma(n,shape = a, rate = b)
+
+Y <- rnorm(n, mean = 0, sd = sqrt(sigmaSq))
+
+
+
+b.update  <- function(sigmaSq)
+{
+  b.pos <- rgamma(1,shape = 1, rate = 1 + sum(1/sigmaSq))
+  return(b.pos)
+}
+
+sigmaSq.update <- function(Y, a, b,n)
+{
+  sigmaSq<- rinvgamma(n, shape = a + 1/2, rate = b + 0.5*sum(Y^2))
+  
+  return(sigmaSq)
+}
+
+MCMC <- function(Y, b.init, sigmaSq.init, iters){
+  
+  # chain initiation
+  b <- b.init
+  n <- length(Y)
+  sigmaSq <- rep(sigmaSq.init, n)
+  
+  # define chains
+  b.chain <- rep(NA, iters)
+  sigmaSq.chain <- matrix(NA, iters, n)
+  
+  # start MCMC
+  for(i in 1:iters){
+    sigmaSq <- sigmaSq.update(Y, a, b,n)
+    b <- b.update(sigmaSq)
+    
+    
+    b.chain[i] <- b
+    sigmaSq.chain[i,] <- sigmaSq
+    
+  }
+  
+  # return chains
+  out <- list(b.chain = b.chain, 
+              sigmaSq.chain = sigmaSq.chain)
+  return(out)}
+```
+
+
+
+### (c) 
+### a = 10
+```{r}
+set.seed(1)
+library(invgamma)
+n <- 10
+a <- 10
+b <- rgamma(1,shape = 1,rate = 1)
+sigmaSq <- rinvgamma(n,shape = a, rate = b)
+
+Y <- rnorm(n, mean = 0, sd = sqrt(sigmaSq))
+
+
+
+b.update  <- function(sigmaSq)
+{
+  b.pos <- rgamma(1,shape = 1, rate = 1 + sum(1/sigmaSq))
+  return(b.pos)
+}
+
+sigmaSq.update <- function(Y, a, b,n)
+{
+  sigmaSq<- rinvgamma(n, shape = a + 1/2, rate = b + 0.5*sum(Y^2))
+  
+  return(sigmaSq)
+}
+
+MCMC <- function(Y, b.init, sigmaSq.init, iters){
+  
+  # chain initiation
+  b <- b.init
+  n <- length(Y)
+  sigmaSq <- rep(sigmaSq.init, n)
+  
+  # define chains
+  b.chain <- rep(NA, iters)
+  sigmaSq.chain <- matrix(NA, iters, n)
+  
+  # start MCMC
+  for(i in 1:iters){
+    sigmaSq <- sigmaSq.update(Y, a, b,n)
+    b <- b.update(sigmaSq)
+    
+    
+    b.chain[i] <- b
+    sigmaSq.chain[i,] <- sigmaSq
+    
+  }
+  
+  # return chains
+  out <- list(b.chain = b.chain, 
+              sigmaSq.chain = sigmaSq.chain)
+  return(out)}
+
+
+MCMC.out <- MCMC(Y = Y,
+                 b.init = 0, 
+                 sigmaSq.init = .04,
+                 iters = 30000)
+
+
+# marginal plot
+plot(density(MCMC.out$b.chain), xlab = expression(b))
+plot(density(MCMC.out$sigmaSq.chain[,1]),xlab = "sigmaSq1")
+plot(density(MCMC.out$sigmaSq.chain[,2]),xlab = "sigmaSq2")
+plot(density(MCMC.out$sigmaSq.chain[,3]),xlab = "sigmaSq3")
+plot(density(MCMC.out$sigmaSq.chain[,4]),xlab = "sigmaSq4")
+plot(density(MCMC.out$sigmaSq.chain[,5]),xlab = "sigmaSq5")
+plot(density(MCMC.out$sigmaSq.chain[,6]),xlab = "sigmaSq6")
+plot(density(MCMC.out$sigmaSq.chain[,7]),xlab = "sigmaSq7")
+plot(density(MCMC.out$sigmaSq.chain[,8]),xlab = "sigmaSq8")
+plot(density(MCMC.out$sigmaSq.chain[,9]),xlab = "sigmaSq9")
+plot(density(MCMC.out$sigmaSq.chain[,10]),xlab = "sigmaSq10")
+
+
+```
+
+
+### (d) 
+### a =1
+```{r}
+set.seed(1)
+library(invgamma)
+n <- 10
+a <- 1
+b <- rgamma(1,shape = 1,rate = 1)
+sigmaSq <- rinvgamma(n,shape = a, rate = b)
+
+Y <- rnorm(n, mean = 0, sd = sqrt(sigmaSq))
+
+
+
+b.update  <- function(sigmaSq)
+{
+  b.pos <- rgamma(1,shape = 1, rate = 1 + sum(1/sigmaSq))
+  return(b.pos)
+}
+
+sigmaSq.update <- function(Y, a, b,n)
+{
+  sigmaSq<- rinvgamma(n, shape = a + 1/2, rate = b + 0.5*sum(Y^2))
+  
+  return(sigmaSq)
+}
+
+MCMC <- function(Y, b.init, sigmaSq.init, iters){
+  
+  # chain initiation
+  b <- b.init
+  n <- length(Y)
+  sigmaSq <- rep(sigmaSq.init, n)
+  
+  # define chains
+  b.chain <- rep(NA, iters)
+  sigmaSq.chain <- matrix(NA, iters, n)
+  
+  # start MCMC
+  for(i in 1:iters){
+    sigmaSq <- sigmaSq.update(Y, a, b,n)
+    b <- b.update(sigmaSq)
+    
+    
+    b.chain[i] <- b
+    sigmaSq.chain[i,] <- sigmaSq
+    
+  }
+  
+  # return chains
+  out <- list(b.chain = b.chain, 
+              sigmaSq.chain = sigmaSq.chain)
+  return(out)}
+
+
+MCMC.out <- MCMC(Y = Y,
+                 b.init = 0, 
+                 sigmaSq.init = .04,
+                 iters = 30000)
+
+
+# marginal plot
+plot(density(MCMC.out$b.chain), xlab = expression(b))
+plot(density(MCMC.out$sigmaSq.chain[,1]),xlab = "sigmaSq1")
+plot(density(MCMC.out$sigmaSq.chain[,2]),xlab = "sigmaSq2")
+plot(density(MCMC.out$sigmaSq.chain[,3]),xlab = "sigmaSq3")
+plot(density(MCMC.out$sigmaSq.chain[,4]),xlab = "sigmaSq4")
+plot(density(MCMC.out$sigmaSq.chain[,5]),xlab = "sigmaSq5")
+plot(density(MCMC.out$sigmaSq.chain[,6]),xlab = "sigmaSq6")
+plot(density(MCMC.out$sigmaSq.chain[,7]),xlab = "sigmaSq7")
+plot(density(MCMC.out$sigmaSq.chain[,8]),xlab = "sigmaSq8")
+plot(density(MCMC.out$sigmaSq.chain[,9]),xlab = "sigmaSq9")
+plot(density(MCMC.out$sigmaSq.chain[,10]),xlab = "sigmaSq10")
+```
+
+
+
+### (e)
+### jags part
+```{r}
+
+library(rjags)
+## a=10
+a <- 10
+
+data <- list(Y = Y, n = length(Y), a = a)
+model_string <- textConnection("model{
+# Likelihood (dnorm uses a precision, not variance)
+for(i in 1:n){
+Y[i] ~ dnorm(0,tau[i]) #tau = 1/sigma.sq
+}
+
+#prior
+for(i in 1:n){
+  tau[i] ~ dgamma(a, b)
+  sigma.sq[i] <- 1/tau[i]
+}
+
+b ~ dgamma(1,1)
+
+}")
+tau_init <- rep(0.04, n)
+inits <- list(tau = tau_init, b = 0.02)
+model <- jags.model(model_string, data = data, inits = inits, quiet = TRUE)
+update(model, 10000, progress.bar = "none")
+params <- c("b", "sigma.sq")
+samples <- coda.samples(model,
+                        variable.names = params,
+                        n.iter = 20000, progress.bar = "none")
+
+summary(samples)
+
+
+plot(samples)
+
+```
+
+
+
+both have similar results
+
+
+
+# 4
+
+### (a)
+because when calculate mean of $\theta_i$ prior then we get $q_i$ which is belong to $(0,1)$
+
+
+### (b)
+
+
+### (c)
+The full conditional posterior for $\theta_1$ is $Beta(Y_1 + q_1*exp(m),  n_1 - Y_1 + (1-q_i)*exp(m))$
+
+
+### (d)
+```{r}
+proportion <- c(0.845,0.847,0.880,0.674,0.909,0.898,0.770,0.801,0.802,0.875)
+clucth_make <- c(64,72,55,27,75,24,28,66,40,13)
+clucth_attm <- c(75,95,63,39,83,26,41,82,54,16)
+
+player_nam <- c("Russell Westbrook ","James Harden ","Kawhi Leonard ","LeBron James",
+                "Isaiah Thomas","Stephen Curry","Giannis Antetokounmpo",
+                "John Wall","Anthony Davis","Kevin Durant")
+data <- data.frame(player_nam,proportion,clucth_make,clucth_attm)
+n <- 10
+Y<- data$clucth_make
+theta <- data$proportion
+n_s <- data$clucth_attm
+q <- runif(n) 
+m.update <- function(m,theta, q, sdev =4)
+{
+  m_j <- m
+  m_c <- rnorm(1,mean = m,sd = sdev)
+  Low <- (m^2)/20
+  Upp <- (m_c^2)/20
+  for (i in 1:n) {
+    Low <- Low + (q[i]* exp(m) - 1)*log(theta[i]) + ((1- q[i])*exp(m) -1)*log(1-theta[i])
+  }
+  
+  for (i in 1:n) {
+    Upp <- Upp + (q[i]* exp(m_c) - 1)*log(theta[i]) + ((1- q[i])*exp(m_c) -1 )*log(1-theta[i])
+  }
+  logR <- Upp - Low
+  if(logR == "NaN")
+  {
+    return(m_j)
+  }
+  U <- runif(1) # U(0,1)
+  if(log(U) < logR){
+    m_j <- m_c
+  }
+  
+  return(m_j)
+}
+
+
+theta.update <- function(Y,q,n,m, n_s)
+{
+  theta.pos <- rbeta(n, shape1 = Y + q*exp(m), shape2 = n_s - Y +exp(1- q))
+  return(theta.pos)
+}
+
+
+MCMC <- function(Y, m.init, theta.init, a, b, iters){
+  
+  # chain initiation
+  m <- m.init
+  n <- length(Y)
+  theta <- rep(theta.init, n)
+  
+  # define chains
+  m.chain <- rep(NA, iters)
+  theta.chain <- matrix(NA, iters, n)
+  
+  # start MCMC
+  for(i in 1:iters){
+    theta <- theta.update(Y,q,n, m,n_s )
+    m <- m.update(m,theta , q)
+    
+    
+    m.chain[i] <- m
+    theta.chain[i,] <- theta
+    
+  }
+  
+  # return chains
+  out <- list(m.chain = m.chain, 
+              theta.chain = theta.chain)
+  return(out)}
+
+# RUN MCMC
+
+MCMC.out <- MCMC(Y = Y,
+                 m.init = 1, 
+                 theta.init = 0.4,
+                 iters = 30000,n)
+
+
+theta.pos.samples <- MCMC.out$theta.chain
+theta1_95 <- quantile(theta.pos.samples[,1], c(0.025,0.975))
+theta2_95 <- quantile(theta.pos.samples[,2], c(0.025,0.975))
+theta3_95 <- quantile(theta.pos.samples[,3], c(0.025,0.975))
+theta4_95 <- quantile(theta.pos.samples[,4], c(0.025,0.975))
+theta5_95 <- quantile(theta.pos.samples[,5], c(0.025,0.975))
+theta6_95 <- quantile(theta.pos.samples[,6], c(0.025,0.975))
+theta7_95 <- quantile(theta.pos.samples[,7], c(0.025,0.975))
+theta8_95 <- quantile(theta.pos.samples[,8], c(0.025,0.975))
+theta9_95 <- quantile(theta.pos.samples[,9], c(0.025,0.975))
+theta10_95 <- quantile(theta.pos.samples[,10], c(0.025,0.975))
+
+
+m.pos.samples <- MCMC.out$m.chain
+m.pos_95 <- quantile(m.pos.samples, c(0.025,0.975))
+
+ci95 <- rbind(m.pos_95 ,theta1_95, theta2_95, theta3_95,
+              theta4_95, theta5_95, theta6_95,theta7_95,
+              theta8_95, theta9_95,theta10_95)
+print("95% credibles interval")
+print(ci95)
+
+```
+
+
+### (e)
+```{r}
+proportion <- c(0.845,0.847,0.880,0.674,0.909,0.898,0.770,0.801,0.802,0.875)
+clucth_make <- c(64,72,55,27,75,24,28,66,40,13)
+clucth_attm <- c(75,95,63,39,83,26,41,82,54,16)
+
+player_nam <- c("Russell Westbrook ","James Harden ","Kawhi Leonard ","LeBron James",
+                "Isaiah Thomas","Stephen Curry","Giannis Antetokounmpo",
+                "John Wall","Anthony Davis","Kevin Durant")
+data <- data.frame(player_nam,proportion,clucth_make,clucth_attm)
+n <- 10
+Y<- data$clucth_make
+theta <- data$proportion
+n_s <- data$clucth_attm
+q <- runif(n)
+data <- list(Y = Y, n = n, q=q, n_s = n_s)
+library(rjags)
+model_string <- textConnection("model{
+# Likelihood 
+for(i in 1:n){
+Y[i] ~ dbin(theta[i],n_s[i])
+}
+
+#prior
+for(i in 1:n){
+theta[i] ~ dbeta(q[i] * exp(m),exp(m)*(1-q[i]) )
+}
+m ~ dnorm(0,0.1)
+
+}")
+theta_inti <- rep(0.4,n)
+inits <- list( theta = theta_inti,m = 3.3)
+model <- jags.model(model_string, data = data, inits = inits, quiet = TRUE)
+update(model, 10000, progress.bar = "none")
+params <- c("m", "theta")
+samples <- coda.samples(model,
+                        variable.names = params,
+                        n.iter = 20000, progress.bar = "none")
+
+summary(samples)
+plot(samples)
+
+```
+ 
+ 
+ yes both code have very close answer of 95% credibles interval
+
+
+ 
+### (f)
+JAGS are easy use here we don't have write all marginal posterior distribution
+
+
+but writing own MCMC code we have find their marginal posterior distribution
+
+
+# 8
+```{r,echo =TRUE}
+library(MASS)
+data(galaxies)
+Y <- galaxies
+
+
+mu.update <- function(Y, mu, sigma)
+{
+  mu_j <- mu
+  mu_c <- rnorm(1, mean = mu, sd = 2)
+  R <- exp(sum(abs(Y - mu)) - sum(abs(Y - mu_c)))
+  R <- min(1,R)
+  U <- runif(1)
+  if(U < R)
+  {
+    mu_j <- mu_c
+  }
+  return(mu_j)
+}
+sigma.update <- function(Y, mu, sigma)
+{
+  n <- length(Y)
+  sigma_j <- sigma
+  sigma_c <- rnorm(1, mean = sigma, sd = 2)
+  R <- (sigma/(sigma_c))^n * exp(sum(Y -mu)*(1/sigma - 1/sigma_j))
+  R <- min(1,R)
+  if(runif(1) < R)
+  {
+    sigma_j <- sigma_c
+  }
+  return(sigma_j)
+}
+
+MCMC <- function(Y, mu.init, sigma.init, iters){
+  
+  # chain initiation
+  mu <- mu.init
+  n <- length(Y)
+  sigma <- sigma.init
+  
+  # define chains
+  mu.chain <- rep(NA, iters)
+  sigma.chain <-rep(NA, iters)
+  # start MCMC
+  for(i in 1:iters){
+    sigma <- sigma.update(Y, mu, sigma )
+    mu <- mu.update(Y, mu, sigma)
+    
+    
+    mu.chain[i] <- mu
+    sigma.chain[i] <- sigma
+    
+  }
+  
+  # return chains
+  out <- list(mu.chain = mu.chain, 
+              sigma.chain = sigma.chain)
+  return(out)}
+
+# RUN MCMC
+
+MCMC.out <- MCMC(Y = Y,
+                 mu.init = 1, 
+                 sigma.init = 0.4,
+                 iters = 30000)
+
+
+# marginal plot
+plot(density(MCMC.out$mu.chain))
+plot(density(MCMC.out$sigma.chain))
+```
